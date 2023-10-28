@@ -564,6 +564,9 @@ DESCRIPTION
 .#define bfd_mach_amdgcn_gfx1030 0x036
 .#define bfd_mach_amdgcn_gfx1031 0x037
 .#define bfd_mach_amdgcn_gfx1032 0x038
+.  bfd_arch_dcpu16,    {* Mojang DCPU16 *}
+.#define bfd_mach_dcpu16  1
+
 .  bfd_arch_last
 .  };
 */
@@ -630,6 +633,7 @@ extern const bfd_arch_info_type bfd_crx_arch;
 extern const bfd_arch_info_type bfd_csky_arch;
 extern const bfd_arch_info_type bfd_d10v_arch;
 extern const bfd_arch_info_type bfd_d30v_arch;
+extern const bfd_arch_info_type bfd_dcpu16_arch;
 extern const bfd_arch_info_type bfd_dlx_arch;
 extern const bfd_arch_info_type bfd_bpf_arch;
 extern const bfd_arch_info_type bfd_epiphany_arch;
@@ -718,6 +722,7 @@ static const bfd_arch_info_type * const bfd_archures_list[] =
     &bfd_csky_arch,
     &bfd_d10v_arch,
     &bfd_d30v_arch,
+    &bfd_dcpu16_arch,
     &bfd_dlx_arch,
     &bfd_bpf_arch,
     &bfd_epiphany_arch,

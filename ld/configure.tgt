@@ -304,6 +304,8 @@ d30v-*-*)		targ_emul=d30velf
 			targ_extra_emuls="d30v_e d30v_o"
 			targ_extra_ofiles=ldelfgen.o
 			;;
+dcpu16-*-*)		targ_emul=elf32dcpu16
+			;;
 dlx-*-elf*)		targ_emul=elf32_dlx
 			targ_extra_ofiles=ldelfgen.o
 			;;

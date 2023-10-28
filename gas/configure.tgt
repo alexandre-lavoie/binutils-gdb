@@ -58,6 +58,7 @@ case ${cpu} in
   cr16*)		cpu_type=cr16 endian=little ;;
   crisv32)		cpu_type=cris arch=crisv32 ;;
   crx*)			cpu_type=crx endian=little ;;
+  dcpu16*)			cpu_type=dcpu16 endian=little ;;
   epiphany*)		cpu_type=epiphany endian=little ;;
   fido)			cpu_type=m68k ;;
   hppa*)		cpu_type=hppa ;;
@@ -189,6 +190,9 @@ case ${generic_target} in
 
   d10v-*-*)				fmt=elf ;;
   d30v-*-*)				fmt=elf ;;
+
+  dcpu16-*-*)     fmt=elf ;;
+
   dlx-*-*)				fmt=elf ;;
 
   bpf-*-*)				fmt=elf ;;

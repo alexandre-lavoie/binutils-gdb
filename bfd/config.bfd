@@ -191,6 +191,7 @@ cr16*)		 targ_archs=bfd_cr16_arch ;;
 crisv32)	 targ_archs=bfd_cris_arch ;;
 crx*)		 targ_archs=bfd_crx_arch ;;
 csky*)		 targ_archs=bfd_csky_arch ;;
+dcpu16*) targ_archs=bfd_dcpu16_arch ;;
 dlx*)		 targ_archs=bfd_dlx_arch ;;
 fido*)		 targ_archs=bfd_m68k_arch ;;
 hppa*)		 targ_archs=bfd_hppa_arch ;;
@@ -496,6 +497,11 @@ case "${targ}" in
 
   d30v-*-*)
     targ_defvec=d30v_elf32_vec
+    ;;
+
+  dcpu16-*-*)
+    targ_defvec=dcpu16_elf32_vec
+    targ_selvecs=dcpu16_elf32_vec
     ;;
 
 #ifdef BFD64

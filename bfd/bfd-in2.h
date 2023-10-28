@@ -1322,6 +1322,8 @@ enum bfd_architecture
 {
   bfd_arch_unknown,   /* File arch not known.  */
   bfd_arch_obscure,   /* Arch known, not one of these.  */
+  bfd_arch_dcpu16,    /* Mojang DCPU16 */
+#define bfd_mach_dcpu16                1
   bfd_arch_m68k,      /* Motorola 68xxx.  */
 #define bfd_mach_m68000                1
 #define bfd_mach_m68008                2

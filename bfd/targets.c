@@ -724,6 +724,7 @@ extern const bfd_target csky_elf32_be_vec;
 extern const bfd_target csky_elf32_le_vec;
 extern const bfd_target d10v_elf32_vec;
 extern const bfd_target d30v_elf32_vec;
+extern const bfd_target dcpu16_elf32_vec;
 extern const bfd_target dlx_elf32_be_vec;
 extern const bfd_target elf32_be_vec;
 extern const bfd_target elf32_le_vec;
@@ -1056,6 +1057,8 @@ static const bfd_target * const _bfd_target_vector[] =
 
 	&d10v_elf32_vec,
 	&d30v_elf32_vec,
+
+	&dcpu16_elf32_vec,
 
 	&dlx_elf32_be_vec,
 
