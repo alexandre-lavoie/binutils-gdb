@@ -3,6 +3,19 @@
 #include "opcode/dcpu16.h"
 #include <ctype.h>
 
+typedef struct
+{
+  expressionS reg;
+  expressionS imm;
+} dcpu16_parse_argument;
+
+typedef struct
+{
+  const dcpu16_op_entry *op;
+  dcpu16_parse_argument lhs;
+  dcpu16_parse_argument rhs;
+} dcpu16_parse_instruction;
+
 const char *md_shortopts = "";
 struct option md_longopts[] = {};
 size_t md_longopts_size = sizeof(md_longopts);
@@ -332,7 +345,7 @@ validate_instruction(const dcpu16_parse_instruction *in)
 
 static inline void
 optimize_small_immediate(const dcpu16_parse_argument *in, dcpu16_build_argument *out)
-{ 
+{
   if (in->reg.X_op != 0) return;
   if (in->imm.X_op == O_symbol) return;
 
