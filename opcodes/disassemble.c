@@ -47,6 +47,7 @@
 #define ARCH_csky
 #define ARCH_d10v
 #define ARCH_d30v
+#define ARCH_dcpu16
 #define ARCH_dlx
 #define ARCH_epiphany
 #define ARCH_fr30
@@ -199,6 +200,11 @@ disassembler (enum bfd_architecture a,
 #ifdef ARCH_d30v
     case bfd_arch_d30v:
       disassemble = print_insn_d30v;
+      break;
+#endif
+#ifdef ARCH_dcpu16
+    case bfd_arch_dcpu16:
+      disassemble = print_insn_dcpu16;
       break;
 #endif
 #ifdef ARCH_dlx
