@@ -1,6 +1,7 @@
 #include "as.h"
 #include "bfd.h"
 #include "opcode/dcpu16.h"
+#include <ctype.h>
 
 const char *md_shortopts = "";
 struct option md_longopts[] = {};
@@ -60,29 +61,70 @@ md_begin(void)
 }
 
 static bool
+is_push_reg(const dcpu16_parse_argument *in)
+{
+  if (in->reg.X_md == 0) return false;
+
+  const char *name = dcpu16_value_map[in->reg.X_add_number].name;
+
+  return strncmp(name, "push", 4) == 0;
+}
+
+static bool
+is_pop_reg(const dcpu16_parse_argument *in)
+{
+  if (in->reg.X_md == 0) return false;
+
+  const char *name = dcpu16_value_map[in->reg.X_add_number].name;
+
+  return strncmp(name, "pop", 3) == 0;
+}
+
+static bool
+is_invalid_offset(const dcpu16_parse_argument *in)
+{
+  if (in->reg.X_op == 0 || in->imm.X_op == 0) return false;
+
+  return (in->reg.X_md & DCPU16_VALUE_OF_MASK) == 0;
+}
+
+static bool
+is_invalid_register_immediate(const dcpu16_parse_argument *in)
+{
+  if (in->reg.X_md == 0 || in->imm.X_md == 0) return false;
+
+  int val = dcpu16_value_map[in->reg.X_add_number].value;
+
+  return val > VAL_REG_J && val != VAL_PEEK;
+}
+
+static bool
 parse_opcode(char **str, const dcpu16_op_entry **op)
 {
   char *ptr = *str;
+  bool result = true;
 
   *op = str_hash_find_n(dcpu16_op_hsh, ptr, 3);
-  if (*op == NULL) 
-  {
-    as_bad(_("Opcode not found"));
-    return false;
-  }
+  if (*op == NULL) result = false;
 
   *str = ptr + 4;
-  return true;
+  return result;
 }
 
 static bool
 parse_register(char **str, expressionS *exp) 
 {
   char *ptr = *str;
-  while (*ptr >= 'A' && *ptr <= 'Z') ptr++;
+  while ((*ptr >= 'A' && *ptr <= 'Z') || (*ptr >= 'a' && *ptr <= 'z')) ptr++;
   if (ptr <= *str) return false;
 
-  symbolS *sym = str_hash_find_n(dcpu16_value_hsh, *str, ptr - *str);
+  size_t size = ptr - *str;
+  if (size > 4) return false;
+
+  char lower[5] = { 0 };
+  for (size_t i = 0; i < size; i++) lower[i] = tolower((*str)[i]);
+
+  symbolS *sym = str_hash_find_n(dcpu16_value_hsh, lower, size);
   if (sym == NULL) return false;
 
   exp->X_op = O_register;
@@ -97,15 +139,16 @@ parse_immediate(char **str, expressionS *exp)
 {
   char *ptr = *str;
 
+  if (*ptr == '-') ptr++;
+
   char radix;
   if (strncmp(ptr, "0x", 2) == 0) radix = 16;
   else if (strncmp(ptr, "0b", 2) == 0) radix = 2;
   else radix = 10;
 
   char *end;
-  uint16_t result = strtol(ptr, &end, radix);
-
-  if (ptr == end) return false;
+  uint16_t result = strtol(*str, &end, radix);
+  if (*str == end) return false;
 
   exp->X_op = O_big;
   exp->X_add_number = result;
@@ -148,11 +191,7 @@ parse_argument_types(char **str, dcpu16_parse_argument *out)
   if (parse_register(&ptr, &out->reg));
   else if (parse_immediate(&ptr, &out->imm));
   else if (parse_symbol(&ptr, &out->imm));
-  else 
-  {
-    as_bad(_("Invalid argument type"));
-    return false;
-  }
+  else return false;
 
   *str = ptr;
   return true;
@@ -172,7 +211,11 @@ parse_argument(char **str, dcpu16_parse_argument *out)
     out->imm.X_md |= DCPU16_VALUE_OF_MASK;
   }
 
-  if (!parse_argument_types(&ptr, out)) return false;
+  if (!parse_argument_types(&ptr, out)) 
+  {
+    as_bad(_("Invalid argument type"));
+    return false;
+  }
 
   if (*ptr == '+') 
   {
@@ -180,14 +223,18 @@ parse_argument(char **str, dcpu16_parse_argument *out)
 
     bool with_reg = out->reg.X_op != 0;
 
-    if (!parse_argument_types(&ptr, out)) return false;
+    if (!parse_argument_types(&ptr, out)) 
+    {
+      as_bad(_("Invalid add argument type"));
+      return false;
+    }
 
     if (
       (with_reg && out->imm.X_op == 0)
       || (!with_reg && out->reg.X_op == 0)
     )
     {
-      as_bad(_("Invalid add argument type"));
+      as_bad(_("Invalid add argument combination"));
       return false;
     }
   }
@@ -206,8 +253,13 @@ static bool
 parse_instruction(char **str, dcpu16_parse_instruction *out)
 {
   char *ptr = *str;
+  bool result = true;
 
-  if (!parse_opcode(&ptr, &out->op)) return false;
+  if (!parse_opcode(&ptr, &out->op)) 
+  {
+    as_bad(_("Invalid opcode"));
+    result = false;
+  }
 
   if (!parse_argument(&ptr, &out->lhs)) return false;
 
@@ -225,16 +277,63 @@ parse_instruction(char **str, dcpu16_parse_instruction *out)
   if (*ptr != ';' && *ptr != '\0')
   {
     as_bad(_("Expected end of line"));
-    return false;
+    result = false;
   }
 
   *str = ptr;
-  return true;
+  return result;
+}
+
+static bool
+validate_instruction(const dcpu16_parse_instruction *in)
+{
+  bool result = true;
+
+  // LHS
+  if (is_pop_reg(&in->lhs))
+  {
+    as_bad(_("Cannot insert into POP"));
+    result = false;
+  }
+
+  if (is_invalid_offset(&in->lhs))
+  {
+    as_bad(_("Cannot offset without reference"));
+    result = false;
+  }
+
+  if (is_invalid_register_immediate(&in->lhs))
+  {
+    as_bad(_("Immediate only allowed for base registers"));
+    result = false;
+  }
+
+  // RHS
+  if (is_push_reg(&in->rhs))
+  {
+    as_bad(_("Cannot retrieve from PUSH"));
+    result = false;
+  }
+
+  if (is_invalid_offset(&in->rhs))
+  {
+    as_bad(_("Cannot offset without reference"));
+    result = false;
+  }
+
+  if (is_invalid_register_immediate(&in->rhs))
+  {
+    as_bad(_("Immediate only allowed for base registers"));
+    result = false;
+  }
+
+  return result;
 }
 
 static inline void
 optimize_small_immediate(const dcpu16_parse_argument *in, dcpu16_build_argument *out)
-{
+{ 
+  if (in->reg.X_op != 0) return;
   if (in->imm.X_op == O_symbol) return;
 
   if (out->imm == UINT16_MAX) {
@@ -244,18 +343,6 @@ optimize_small_immediate(const dcpu16_parse_argument *in, dcpu16_build_argument 
     out->val = VAL_LIT + (uint8_t)out->imm + 1;
     out->has_imm = false;
   }
-}
-
-static bool
-is_valid_immediate(const dcpu16_parse_argument *in, dcpu16_build_argument *out)
-{
-  if (in->reg.X_md != 0 && in->imm.X_md != 0 && out->val > VAL_REG_J)
-  {
-    as_bad(_("Immediate only allowed for base registers"));
-    return false;
-  }
-
-  return true;
 }
 
 static void
@@ -285,7 +372,6 @@ build_argument(const dcpu16_parse_argument *in, dcpu16_build_argument *out)
   if (in->reg.X_op != 0) out->val = dcpu16_value_map[in->reg.X_add_number].value;
 
   resolve_immediate(in, out);
-  if (!is_valid_immediate(in, out)) return false;
   handle_immediate(in, out);
 
   return true;
@@ -348,11 +434,16 @@ emit_instruction(const dcpu16_build_instruction *in)
 void
 md_assemble(char *str)
 {
+  bool result = true;
+
   dcpu16_parse_instruction p = (dcpu16_parse_instruction) { 0 };
-  if (!parse_instruction(&str, &p)) return;
+  if (!parse_instruction(&str, &p)) result = false;
+  if (!validate_instruction(&p)) result = false;
 
   dcpu16_build_instruction b = (dcpu16_build_instruction) { 0 };
-  if (!build_instruction(&p, &b)) return;
+  if (!build_instruction(&p, &b)) result = false;
+
+  if (!result) return;
 
   emit_instruction(&b);
 }

@@ -45,20 +45,20 @@ typedef struct
 
 const dcpu16_value_entry dcpu16_value_map[] = 
 {
-  { "A",      VAL_REG_A },
-  { "B",      VAL_REG_B },
-  { "C",      VAL_REG_C },
-  { "X",      VAL_REG_X },
-  { "Y",      VAL_REG_Y },
-  { "Z",      VAL_REG_Y },
-  { "I",      VAL_REG_I },
-  { "J",      VAL_REG_J },
-  { "SP",     VAL_SP },
-  { "PUSH",   VAL_PUSH_POP },
-  { "POP",    VAL_PUSH_POP },
-  { "PEEK",   VAL_PEEK },
-  { "PC",     VAL_PC },
-  { "EX",     VAL_EX }
+  { "a",      VAL_REG_A },
+  { "b",      VAL_REG_B },
+  { "c",      VAL_REG_C },
+  { "x",      VAL_REG_X },
+  { "y",      VAL_REG_Y },
+  { "z",      VAL_REG_Y },
+  { "i",      VAL_REG_I },
+  { "j",      VAL_REG_J },
+  { "sp",     VAL_SP },
+  { "push",   VAL_PUSH_POP },
+  { "pop",    VAL_PUSH_POP },
+  { "peek",   VAL_PEEK },
+  { "pc",     VAL_PC },
+  { "ex",     VAL_EX }
 };
 const size_t dcpu16_value_map_size = sizeof(dcpu16_value_map) / sizeof(dcpu16_value_map[0]);
 
