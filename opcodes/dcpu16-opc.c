@@ -156,3 +156,21 @@ const dcpu16_op_entry dcpu16_op_map[] =
   { "hwi", BOP_SOP, SOP_HWI },
 };
 const size_t dcpu16_op_map_size = sizeof(dcpu16_op_map) / sizeof(dcpu16_op_map[0]);
+
+bool
+val_has_imm(uint8_t val)
+{
+  return (val == VAL_IMM) || (val == VAL_AT_IMM) || (val >= VAL_AT_IMM_REG && val < VAL_PUSH_POP);
+}
+
+bool
+val_has_reg(uint8_t val)
+{
+  return val <= VAL_EX;
+}
+
+bool
+val_is_vof(uint8_t val)
+{
+  return (val >= VAL_AT_REG && val < VAL_PUSH_POP) || val == VAL_AT_IMM;
+}

@@ -3804,6 +3804,11 @@ ENUMDOC
   This is a 32-bit pc-relative reloc.
 
 ENUM
+  BFD_RELOC_DCPU16_16
+ENUMDOC
+  Absolute 16bit reloc
+
+ENUM
   BFD_RELOC_DLX_HI16_S
 ENUMDOC
   DLX relocs

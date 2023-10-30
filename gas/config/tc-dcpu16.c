@@ -3,19 +3,6 @@
 #include "opcode/dcpu16.h"
 #include <ctype.h>
 
-typedef struct
-{
-  expressionS reg;
-  expressionS imm;
-} dcpu16_parse_argument;
-
-typedef struct
-{
-  const dcpu16_op_entry *op;
-  dcpu16_parse_argument lhs;
-  dcpu16_parse_argument rhs;
-} dcpu16_parse_instruction;
-
 const char *md_shortopts = "";
 struct option md_longopts[] = {};
 size_t md_longopts_size = sizeof(md_longopts);
@@ -74,68 +61,28 @@ md_begin(void)
 }
 
 static bool
-is_push_reg(const dcpu16_parse_argument *in)
+parse_opcode(const char *name, expressionS *expr)
 {
-  if (in->reg.X_md == 0) return false;
+  if (strnlen(name, 4) > 3) return false;
 
-  const char *name = dcpu16_value_map[in->reg.X_add_number].name;
+  dcpu16_op_entry *entry = str_hash_find_n(dcpu16_op_hsh, name, 3);
+  if (entry == NULL) return false;
 
-  return strncmp(name, "push", 4) == 0;
+  expr->X_op = O_op;
+  expr->X_add_number = entry->bop;
+  expr->X_md = entry->sop;
+
+  return true;
 }
 
 static bool
-is_pop_reg(const dcpu16_parse_argument *in)
+parse_register(const char *name, expressionS *exp) 
 {
-  if (in->reg.X_md == 0) return false;
-
-  const char *name = dcpu16_value_map[in->reg.X_add_number].name;
-
-  return strncmp(name, "pop", 3) == 0;
-}
-
-static bool
-is_invalid_offset(const dcpu16_parse_argument *in)
-{
-  if (in->reg.X_op == 0 || in->imm.X_op == 0) return false;
-
-  return (in->reg.X_md & DCPU16_VALUE_OF_MASK) == 0;
-}
-
-static bool
-is_invalid_register_immediate(const dcpu16_parse_argument *in)
-{
-  if (in->reg.X_md == 0 || in->imm.X_md == 0) return false;
-
-  int val = dcpu16_value_map[in->reg.X_add_number].value;
-
-  return val > VAL_REG_J && val != VAL_PEEK;
-}
-
-static bool
-parse_opcode(char **str, const dcpu16_op_entry **op)
-{
-  char *ptr = *str;
-  bool result = true;
-
-  *op = str_hash_find_n(dcpu16_op_hsh, ptr, 3);
-  if (*op == NULL) result = false;
-
-  *str = ptr + 4;
-  return result;
-}
-
-static bool
-parse_register(char **str, expressionS *exp) 
-{
-  char *ptr = *str;
-  while ((*ptr >= 'A' && *ptr <= 'Z') || (*ptr >= 'a' && *ptr <= 'z')) ptr++;
-  if (ptr <= *str) return false;
-
-  size_t size = ptr - *str;
+  size_t size = strnlen(name, 5);
   if (size > 4) return false;
 
   char lower[5] = { 0 };
-  for (size_t i = 0; i < size; i++) lower[i] = tolower((*str)[i]);
+  for (size_t i = 0; i < size; i++) lower[i] = tolower(name[i]);
 
   symbolS *sym = str_hash_find_n(dcpu16_value_hsh, lower, size);
   if (sym == NULL) return false;
@@ -143,279 +90,215 @@ parse_register(char **str, expressionS *exp)
   exp->X_op = O_register;
   exp->X_add_number = S_GET_VALUE(sym);
 
-  *str = ptr;
   return true;
 }
 
 static bool
-parse_immediate(char **str, expressionS *exp)
+parse_symbol(const char *name, expressionS *exp)
 {
-  char *ptr = *str;
-
-  if (*ptr == '-') ptr++;
-
-  char radix;
-  if (strncmp(ptr, "0x", 2) == 0) radix = 16;
-  else if (strncmp(ptr, "0b", 2) == 0) radix = 2;
-  else radix = 10;
-
-  char *end;
-  uint16_t result = strtol(*str, &end, radix);
-  if (*str == end) return false;
-
-  exp->X_op = O_big;
-  exp->X_add_number = result;
-
-  *str = end;
-  return true;
-}
-
-#define is_valid_symbol_char(v) (v >= 'A' && v <= 'Z') || (v >= 'a' && v <= 'z') || (v >= '0' && v <= '9') || v == '_'
-
-static bool
-parse_symbol(char **str, expressionS *exp)
-{
-  char *ptr = *str;
-
-  if (*ptr >= '0' && *ptr <= '9') return false;
-  while (is_valid_symbol_char(*ptr)) ptr++;
-
-  if (ptr == *str) return false;
-  size_t size = ptr - *str;
-
-  char buffer[DCPU16_SYMBOL_BYTE_SIZE] = { 0 };
-  strncpy(buffer, *str, (size < DCPU16_SYMBOL_BYTE_SIZE) ? size : DCPU16_SYMBOL_BYTE_SIZE);
-
-  symbolS *sym = symbol_find_or_make(buffer);
+  symbolS *sym = symbol_find_or_make(name);
   know(sym != NULL);
 
   exp->X_op = O_symbol;
   exp->X_add_symbol = sym;
+  exp->X_add_number = 1;
 
-  *str = ptr;
   return true;
 }
 
-static bool
-parse_argument_types(char **str, dcpu16_parse_argument *out)
+int
+dcpu16_parse_name(const char *name, expressionS *exp, char *next_char ATTRIBUTE_UNUSED)
 {
-  char *ptr = *str;
+  if (parse_opcode(name, exp)) return 1;
+  else if (parse_register(name, exp)) return 1;
+  else if (parse_symbol(name, exp)) return 1;
 
-  if (parse_register(&ptr, &out->reg));
-  else if (parse_immediate(&ptr, &out->imm));
-  else if (parse_symbol(&ptr, &out->imm));
-  else return false;
-
-  *str = ptr;
-  return true;
+  return 0;
 }
 
 static bool
-parse_argument(char **str, dcpu16_parse_argument *out) 
+parse_argument(expressionS *out)
 {
-  char *ptr = *str;
+  bool is_value_of = *input_line_pointer == '[';
+  if (is_value_of) input_line_pointer++;
 
-  bool is_value_of = *ptr == '[';
-  if (is_value_of) 
+  expression(out);
+
+  if (is_value_of)
   {
-    ptr++;
+    out->X_md |= DCPU16_VALUE_OF_MASK;
 
-    out->reg.X_md |= DCPU16_VALUE_OF_MASK;
-    out->imm.X_md |= DCPU16_VALUE_OF_MASK;
+    if (*input_line_pointer == ']') input_line_pointer++;
+    else as_warn(_("Missing closing bracket"));
   }
 
-  if (!parse_argument_types(&ptr, out)) 
+  return true;
+}
+
+static bool
+parse_insn(expressionS *op, expressionS *lhs, expressionS *rhs)
+{
+  expression(op);
+
+  if (op->X_op != O_op)
+  {
+    as_bad(_("Invalid opcode"));
+    return false;
+  }
+
+  SKIP_ALL_WHITESPACE();
+
+  if (!parse_argument(lhs)) return false;
+
+  if (op->X_add_number == BOP_SOP) return true;
+
+  if (*(input_line_pointer++) != ',')
+  {
+    as_bad(_("Missing comma"));
+    return false;
+  }
+
+  if (!parse_argument(rhs)) return false;
+
+  return true;
+}
+
+#define GET_REG(i) dcpu16_value_map[i].value
+
+static bool
+build_atomic(const expressionS *exp, dcpu16_argument *out)
+{
+  switch (exp->X_op)
+  {
+    case O_register:
+      out->val = GET_REG(exp->X_add_number);
+      return true;
+    case O_constant:
+      out->val = VAL_IMM;
+      out->imm = exp->X_add_number;
+      return true;
+    case O_symbol:
+      out->val = VAL_IMM;
+      out->sym = make_expr_symbol(exp);
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool
+build_argument(const expressionS *exp, dcpu16_argument *out)
+{
+  bool is_value_of = (exp->X_md & DCPU16_VALUE_OF_MASK);
+
+  if (build_atomic(exp, out))
+  {
+    if (!is_value_of) goto end;
+
+    if (val_has_reg(out->val)) out->val += VAL_AT_REG;
+    else out->val = VAL_AT_IMM;
+  }
+  else if (exp->X_op == O_add)
+  {
+    if (!is_value_of)
+    {
+      as_bad(_("Offset only supported in value of"));
+      return false;
+    }
+
+    expressionS *lhs = symbol_get_value_expression(exp->X_add_symbol);
+    expressionS *rhs = symbol_get_value_expression(exp->X_op_symbol);
+
+    dcpu16_argument larg = (dcpu16_argument) { 0 };
+    dcpu16_argument rarg = (dcpu16_argument) { 0 };
+
+    if (!build_atomic(lhs, &larg) || !build_atomic(rhs, &rarg))
+    {
+      as_bad(_("Offset too complex"));
+      return false;
+    }
+
+    bool ilr = val_has_reg(larg.val);
+    if (ilr != val_has_imm(rarg.val) && val_has_imm(larg.val) != val_has_reg(rarg.val))
+    {
+      as_bad(_("Offset only supports register and immediate"));
+      return false;
+    }
+
+    dcpu16_argument reg_arg = ilr ? larg : rarg;
+    dcpu16_argument imm_arg = ilr ? rarg : larg;
+
+    out->val = reg_arg.val + VAL_AT_IMM_REG;
+    out->imm = imm_arg.imm;
+    out->sym = imm_arg.sym;
+  }
+  else
   {
     as_bad(_("Invalid argument type"));
     return false;
   }
 
-  if (*ptr == '+') 
-  {
-    ptr++;
-
-    bool with_reg = out->reg.X_op != 0;
-
-    if (!parse_argument_types(&ptr, out)) 
-    {
-      as_bad(_("Invalid add argument type"));
-      return false;
-    }
-
-    if (
-      (with_reg && out->imm.X_op == 0)
-      || (!with_reg && out->reg.X_op == 0)
-    )
-    {
-      as_bad(_("Invalid add argument combination"));
-      return false;
-    }
-  }
-
-  if (is_value_of && *(ptr++) != ']')
-  {
-    as_bad(_("Missing closing bracket"));
-    return false;
-  }
-
-  *str = ptr;
+  end:
   return true;
 }
 
 static bool
-parse_instruction(char **str, dcpu16_parse_instruction *out)
+build_insn(const expressionS *op, const expressionS *lhs, const expressionS *rhs, dcpu16_instruction *out)
 {
-  char *ptr = *str;
-  bool result = true;
+  uint8_t bop = op->X_add_number;
+  uint8_t sop = op->X_md;
 
-  if (!parse_opcode(&ptr, &out->op)) 
+  out->op = bop;
+
+  if (bop == BOP_SOP)
   {
-    as_bad(_("Invalid opcode"));
-    result = false;
-  }
-
-  if (!parse_argument(&ptr, &out->lhs)) return false;
-
-  bool is_double_arg = out->op->bop != BOP_SOP;
-  if (is_double_arg) {
-    if (*(ptr++) != ',') 
-    {
-      as_bad(_("Expected comma"));
-      return false;
-    }
-
-    if (!parse_argument(&ptr, &out->rhs)) return false;
-  }
-
-  if (*ptr != ';' && *ptr != '\0')
-  {
-    as_bad(_("Expected end of line"));
-    result = false;
-  }
-
-  *str = ptr;
-  return result;
-}
-
-static bool
-validate_instruction(const dcpu16_parse_instruction *in)
-{
-  bool result = true;
-
-  // LHS
-  if (is_pop_reg(&in->lhs))
-  {
-    as_bad(_("Cannot insert into POP"));
-    result = false;
-  }
-
-  if (is_invalid_offset(&in->lhs))
-  {
-    as_bad(_("Cannot offset without reference"));
-    result = false;
-  }
-
-  if (is_invalid_register_immediate(&in->lhs))
-  {
-    as_bad(_("Immediate only allowed for base registers"));
-    result = false;
-  }
-
-  // RHS
-  if (is_push_reg(&in->rhs))
-  {
-    as_bad(_("Cannot retrieve from PUSH"));
-    result = false;
-  }
-
-  if (is_invalid_offset(&in->rhs))
-  {
-    as_bad(_("Cannot offset without reference"));
-    result = false;
-  }
-
-  if (is_invalid_register_immediate(&in->rhs))
-  {
-    as_bad(_("Immediate only allowed for base registers"));
-    result = false;
-  }
-
-  return result;
-}
-
-static inline void
-optimize_small_immediate(const dcpu16_parse_argument *in, dcpu16_build_argument *out)
-{
-  if (in->reg.X_op != 0) return;
-  if (in->imm.X_op == O_symbol) return;
-
-  if (out->imm == UINT16_MAX) {
-    out->val = VAL_LIT;
-    out->has_imm = false;
-  } else if (out->imm <= 0x1E) {
-    out->val = VAL_LIT + (uint8_t)out->imm + 1;
-    out->has_imm = false;
-  }
-}
-
-static void
-resolve_immediate(const dcpu16_parse_argument *in, dcpu16_build_argument *out)
-{
-  out->has_imm = in->imm.X_op != 0;
-  if (in->imm.X_op == O_symbol) out->imm = symbol_get_value_expression(in->imm.X_add_symbol)->X_add_number;
-  else if (in->imm.X_op == O_big) out->imm = in->imm.X_add_number;
-}
-
-static void
-handle_immediate(const dcpu16_parse_argument *in, dcpu16_build_argument *out)
-{
-  bool vof = (in->reg.X_md & DCPU16_VALUE_OF_MASK) > 0;
-  
-  bool with_reg = in->reg.X_op != 0;
-  bool with_imm = out->has_imm;
-
-  if (with_reg && vof && out->val <= VAL_REG_J) out->val += with_imm ? VAL_AT_IMM_REG : VAL_AT_REG;
-
-  if (!with_reg && with_imm) out->val = vof ? VAL_AT_IMM : VAL_IMM;
-}
-
-static bool
-build_argument(const dcpu16_parse_argument *in, dcpu16_build_argument *out)
-{
-  if (in->reg.X_op != 0) out->val = dcpu16_value_map[in->reg.X_add_number].value;
-
-  resolve_immediate(in, out);
-  handle_immediate(in, out);
-
-  return true;
-}
-
-static bool
-build_instruction(const dcpu16_parse_instruction *in, dcpu16_build_instruction *out)
-{
-  const dcpu16_parse_argument *a_in;
-  if (in->op->bop == BOP_SOP)
-  {
-    if (!build_argument(&in->lhs, &out->a)) return false;
-    out->b.val = in->op->sop;
-    a_in = &in->lhs;
+    if (!build_argument(lhs, &out->a)) return false;
+    out->b.val = sop;
   }
   else
   {
-    if (!build_argument(&in->lhs, &out->b)) return false;
-    if (!build_argument(&in->rhs, &out->a)) return false;
-    a_in = &in->rhs;
+    if (!build_argument(lhs, &out->b)) return false;
+    if (!build_argument(rhs, &out->a)) return false;
   }
-
-  optimize_small_immediate(a_in, &out->a);
-
-  out->op = in->op->bop;
 
   return true;
 }
 
+static inline bool
+optimize_small_immediate(dcpu16_argument *out)
+{
+  if (out->val != VAL_IMM || out->sym != NULL) return false;
+
+  if (out->imm == UINT16_MAX) out->val = VAL_LIT;
+  else if (out->imm <= 0x1E) out->val = VAL_LIT + (uint8_t)out->imm + 1;
+  else return false;
+
+  return true;
+}
+
+static inline bool
+optimize_zero_offset(dcpu16_argument *out)
+{
+  if (out->sym != NULL || out->val < VAL_AT_IMM_REG || out->val >= VAL_PUSH_POP) return false;
+
+  if (out->imm != 0) return false;
+
+  out->val -= (VAL_AT_IMM_REG - VAL_AT_REG);
+
+  return true;
+}
+
+static void
+optimize_insn(dcpu16_instruction *out)
+{
+  optimize_small_immediate(&out->a);
+
+  optimize_zero_offset(&out->a);
+  optimize_zero_offset(&out->b);
+}
+
 static inline void
-emit_opcode(const dcpu16_build_instruction *in)
+emit_opcode(const dcpu16_instruction *in)
 {
   uint16_t insn = 
     ((in->a.val & 0b111111) << 0xA) | 
@@ -426,17 +309,29 @@ emit_opcode(const dcpu16_build_instruction *in)
   md_number_to_chars(frag, insn, DCPU16_INSTRUCTION_BYTE_SIZE);
 }
 
-static inline void
-emit_immediate(const dcpu16_build_argument *in)
+static void
+emit_immediate(const dcpu16_argument *in)
 {
-  if (!in->has_imm) return;
+  if (!val_has_imm(in->val)) return;
 
   char *frag = frag_more(DCPU16_IMMEDIATE_BYTE_SIZE);
   md_number_to_chars(frag, in->imm, DCPU16_INSTRUCTION_BYTE_SIZE);
+
+  if (in->sym != NULL) {
+    symbolS *sym = in->sym;
+
+    expressionS *addr_expr = symbol_get_value_expression(sym);
+    know(addr_expr->X_op == O_symbol);
+    addr_expr->X_add_number = 0;
+
+    int where = frag - frag_now->fr_literal;
+
+    fix_new_exp(frag_now, where, 2, addr_expr, false, BFD_RELOC_16);
+  }
 }
 
 static void
-emit_instruction(const dcpu16_build_instruction *in)
+emit_insn(const dcpu16_instruction *in)
 {
   emit_opcode(in);
 
@@ -447,18 +342,20 @@ emit_instruction(const dcpu16_build_instruction *in)
 void
 md_assemble(char *str)
 {
-  bool result = true;
+  input_line_pointer = str;
 
-  dcpu16_parse_instruction p = (dcpu16_parse_instruction) { 0 };
-  if (!parse_instruction(&str, &p)) result = false;
-  if (!validate_instruction(&p)) result = false;
+  expressionS op = (expressionS) { 0 };
+  expressionS lhs = (expressionS) { 0 };
+  expressionS rhs = (expressionS) { 0 };
 
-  dcpu16_build_instruction b = (dcpu16_build_instruction) { 0 };
-  if (!build_instruction(&p, &b)) result = false;
+  if (!parse_insn(&op, &lhs, &rhs)) return;
 
-  if (!result) return;
+  dcpu16_instruction insn = (dcpu16_instruction) { 0 };
+  if (!build_insn(&op, &lhs, &rhs, &insn)) return;
 
-  emit_instruction(&b);
+  optimize_insn(&insn);
+
+  emit_insn(&insn);
 }
 
 symbolS
@@ -485,19 +382,27 @@ md_section_align(asection *seg ATTRIBUTE_UNUSED, valueT size ATTRIBUTE_UNUSED)
 void
 md_convert_frag(bfd *abfd ATTRIBUTE_UNUSED, asection *seg ATTRIBUTE_UNUSED, fragS *fragp ATTRIBUTE_UNUSED)
 {
-  return;
+  as_fatal(_("unexpected call"));
 }
 
 void
 md_apply_fix(fixS *fixp ATTRIBUTE_UNUSED, valueT *val ATTRIBUTE_UNUSED, segT seg ATTRIBUTE_UNUSED)
-{
-  return;
-}
+{}
 
 arelent
-*tc_gen_reloc(asection *seg ATTRIBUTE_UNUSED, fixS *fixp ATTRIBUTE_UNUSED)
+*tc_gen_reloc(asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
 {
-  return 0;
+  gas_assert(fixp != 0);
+
+  arelent *reloc = XNEW(arelent);
+  reloc->sym_ptr_ptr = XNEW(asymbol*);
+  *reloc->sym_ptr_ptr = symbol_get_bfdsym(fixp->fx_addsy);
+
+  reloc->address = fixp->fx_frag->fr_address + fixp->fx_where;
+  reloc->howto = bfd_reloc_type_lookup(stdoutput, fixp->fx_r_type);
+  reloc->addend = fixp->fx_offset;
+
+  return reloc;
 }
 
 long

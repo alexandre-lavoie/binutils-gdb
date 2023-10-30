@@ -113,16 +113,20 @@ extern const size_t dcpu16_op_map_size;
 typedef struct
 {
   uint8_t val;
-  bool has_imm;
   uint16_t imm;
-} dcpu16_build_argument;
+  void *sym;
+} dcpu16_argument;
 
 typedef struct
 {
   uint8_t op;
-  dcpu16_build_argument b;
-  dcpu16_build_argument a;
-} dcpu16_build_instruction;
+  dcpu16_argument b;
+  dcpu16_argument a;
+} dcpu16_instruction;
+
+bool val_has_reg(uint8_t val);
+bool val_has_imm(uint8_t val);
+bool val_is_vof(uint8_t val);
 
 #ifdef __cplusplus
 }

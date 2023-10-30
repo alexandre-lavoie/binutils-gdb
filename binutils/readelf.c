@@ -107,6 +107,7 @@
 #include "elf/csky.h"
 #include "elf/d10v.h"
 #include "elf/d30v.h"
+#include "elf/dcpu16.h"
 #include "elf/dlx.h"
 #include "elf/bpf.h"
 #include "elf/epiphany.h"
@@ -1069,6 +1070,7 @@ guess_is_rela (unsigned int e_machine)
     case EM_CRX:
     case EM_CSKY:
     case EM_D30V:
+	case EM_DCPU16:
     case EM_CYGNUS_D30V:
     case EM_FR30:
     case EM_FT32:
@@ -1646,6 +1648,10 @@ dump_relocations (Filedata *filedata,
 	case EM_D30V:
 	case EM_CYGNUS_D30V:
 	  rtype = elf_d30v_reloc_type (type);
+	  break;
+
+	case EM_DCPU16:
+	  rtype = elf_dcpu16_reloc_type (type); 
 	  break;
 
 	case EM_DLX:
@@ -2989,6 +2995,7 @@ get_machine_name (unsigned e_machine)
     case EM_ADAPTEVA_EPIPHANY:	return "Adapteva EPIPHANY";
     case EM_CYGNUS_FRV:		return "Fujitsu FR-V";
     case EM_S12Z:               return "Freescale S12Z";
+	case EM_DCPU16:		return "DCPU16";
 
     default:
       snprintf (buff, sizeof (buff), _("<unknown>: 0x%x"), e_machine);

@@ -3,12 +3,6 @@
 #include "bfd.h"
 #include "opcode/dcpu16.h"
 
-static inline bool
-is_vof(const dcpu16_build_argument *in)
-{
-  return (in->val >= VAL_AT_REG && in->val < VAL_PUSH_POP) || in->val == VAL_AT_IMM;
-}
-
 static bool
 read_word(bfd_vma *ptr, struct disassemble_info *info, uint16_t *out)
 {
@@ -28,7 +22,7 @@ read_word(bfd_vma *ptr, struct disassemble_info *info, uint16_t *out)
 }
 
 static bool
-decode_opcode(uint16_t insn, dcpu16_build_instruction *out)
+decode_insn(uint16_t insn, dcpu16_instruction *out)
 {
   out->op    = (insn >> 0x0) & 0b011111;
   out->b.val = (insn >> 0x5) & 0b011111;
@@ -49,63 +43,47 @@ decode_opcode(uint16_t insn, dcpu16_build_instruction *out)
   return false;
 }
 
-static bool
-decode_argument(dcpu16_build_argument *out)
-{
-  out->has_imm = (out->val >= VAL_AT_IMM_REG && out->val < VAL_PUSH_POP) || out->val == VAL_AT_IMM || out->val == VAL_IMM;
-
-  return true;
-}
-
-static bool
-decode_insn(uint16_t insn, dcpu16_build_instruction *out)
-{
-  if (!decode_opcode(insn, out)) return false;
-
-  if (out->op == BOP_SOP)
-  {
-    if (!decode_argument(&out->a)) return false;
-  }
-  else
-  {
-    if (!decode_argument(&out->b)) return false;
-    if (!decode_argument(&out->a)) return false;
-  }
-
-  return true;
-}
-
 static void
-print_opcode(const dcpu16_build_instruction *in, struct disassemble_info *info)
+print_opcode(const dcpu16_instruction *in, struct disassemble_info *info)
 {
   if (in->op == BOP_SOP) (*info->fprintf_styled_func)(info->stream, dis_style_mnemonic, "%s", dcpu16_sop_names[in->b.val]);
   else (*info->fprintf_styled_func)(info->stream, dis_style_mnemonic, "%s", dcpu16_bop_names[in->op]);
 }
 
 static void
-print_argument(const dcpu16_build_argument *in, struct disassemble_info *info, bool is_lhs)
+print_register(const dcpu16_argument *in, struct disassemble_info *info, bool is_lhs)
 {
-  bool vof = is_vof(in);
+  if (in->val > VAL_EX) return;
+
+  if (in->val == VAL_PUSH_POP) (*info->fprintf_styled_func)(info->stream, dis_style_register, "%s", (is_lhs) ? "PUSH" : "POP");
+  else (*info->fprintf_styled_func)(info->stream, dis_style_register, "%s", dcpu16_value_names[in->val]);
+}
+
+static void
+print_immediate(const dcpu16_argument *in, struct disassemble_info *info)
+{
+  if (val_has_imm(in->val)) (*info->fprintf_styled_func)(info->stream, dis_style_immediate, "0x%x", in->imm);
+  else if (in->val >= VAL_LIT) (*info->fprintf_styled_func)(info->stream, dis_style_immediate, "0x%x", (uint16_t)(in->val - VAL_LIT - 1));
+}
+
+static void
+print_argument(const dcpu16_argument *in, struct disassemble_info *info, bool is_lhs)
+{
+  bool vof = val_is_vof(in->val);
 
   if (vof) (*info->fprintf_styled_func)(info->stream, dis_style_text, "[");
 
-  bool with_reg = in->val <= VAL_EX;
-  if (with_reg) 
-  {
-    if (in->val == VAL_PUSH_POP) (*info->fprintf_styled_func)(info->stream, dis_style_register, "%s", (is_lhs) ? "PUSH" : "POP");
-    else (*info->fprintf_styled_func)(info->stream, dis_style_register, "%s", dcpu16_value_names[in->val]);
-  }
+  print_register(in, info, is_lhs);
 
-  if (with_reg && in->has_imm) (*info->fprintf_styled_func)(info->stream, dis_style_text, "+");
+  if (val_has_reg(in->val) && val_has_imm(in->val)) (*info->fprintf_styled_func)(info->stream, dis_style_text, "+");
 
-  if (in->has_imm) (*info->fprintf_styled_func)(info->stream, dis_style_immediate, "0x%x", in->imm);
-  else if (in->val >= VAL_LIT) (*info->fprintf_styled_func)(info->stream, dis_style_immediate, "0x%x", (uint16_t)(in->val - VAL_LIT - 1));
+  print_immediate(in, info);
 
   if (vof) (*info->fprintf_styled_func)(info->stream, dis_style_text, "]");
 }
 
 static void
-print_insn(const dcpu16_build_instruction *in, struct disassemble_info *info)
+print_insn(const dcpu16_instruction *in, struct disassemble_info *info)
 {
   print_opcode(in, info);
 
@@ -129,21 +107,21 @@ print_insn_dcpu16(bfd_vma memaddr, struct disassemble_info *info)
 
   bfd_vma ptr = memaddr;
 
-  uint16_t insn = 0;
-  if (!read_word(&ptr, info, &insn)) return -1;
+  uint16_t insn_asm = 0;
+  if (!read_word(&ptr, info, &insn_asm)) return -1;
 
-  dcpu16_build_instruction p = (dcpu16_build_instruction) { 0 };
+  dcpu16_instruction insn = (dcpu16_instruction) { 0 };
 
-  if (!decode_insn(insn, &p)) {
+  if (!decode_insn(insn_asm, &insn)) {
     (*info->fprintf_func)(info->stream, "...");
     return -1;
   }
 
-  if (p.b.has_imm && !read_word(&ptr, info, &p.b.imm)) return -1;
-  if (p.a.has_imm && !read_word(&ptr, info, &p.a.imm)) return -1;
+  if (val_has_imm(insn.b.val) && !read_word(&ptr, info, &insn.b.imm)) return -1;
+  if (val_has_imm(insn.a.val) && !read_word(&ptr, info, &insn.a.imm)) return -1;
 
   info->insn_type = dis_nonbranch;
-  print_insn(&p, info);
+  print_insn(&insn, info);
 
   return ptr - memaddr;
 }
