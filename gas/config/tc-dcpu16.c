@@ -371,7 +371,7 @@ const char
 }
 
 valueT
-md_section_align(asection *seg ATTRIBUTE_UNUSED, valueT size ATTRIBUTE_UNUSED)
+md_section_align(asection *seg, valueT size)
 {
   int align = bfd_section_alignment(seg);
   int new_size = ((size + (1 << align) -1) & -(1 << align));

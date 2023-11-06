@@ -34,7 +34,7 @@ static reloc_howto_type dcpu16_elf_howto_table[] =
     false
   ),
   HOWTO(R_DCPU16_16,
-    0,
+    1, // Word-based addressing, divide by 2
     2,
     16,
     false,
