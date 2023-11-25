@@ -1,6 +1,6 @@
 ARCH=dcpu16
 MACHINE=
-SCRIPT_NAME=elfdcpu16 # TODO: elfdcpu16
+SCRIPT_NAME=elfdcpu16
 TEMPLATE_NAME=generic
 EXTRA_EM_FILE=genelf
 OUTPUT_FORMAT="elf32-dcpu16"

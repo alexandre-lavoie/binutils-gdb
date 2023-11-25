@@ -294,7 +294,7 @@ optimize_insn(dcpu16_instruction *out)
   optimize_small_immediate(&out->a);
 
   optimize_zero_offset(&out->a);
-  optimize_zero_offset(&out->b);
+  if (out->op != BOP_SOP) optimize_zero_offset(&out->b);
 }
 
 static inline void
@@ -335,7 +335,7 @@ emit_insn(const dcpu16_instruction *in)
 {
   emit_opcode(in);
 
-  emit_immediate(&in->b);
+  if (in->op != BOP_SOP) emit_immediate(&in->b);
   emit_immediate(&in->a);
 }
 

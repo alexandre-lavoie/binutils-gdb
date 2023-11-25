@@ -117,7 +117,7 @@ print_insn_dcpu16(bfd_vma memaddr, struct disassemble_info *info)
     return -1;
   }
 
-  if (val_has_imm(insn.b.val) && !read_word(&ptr, info, &insn.b.imm)) return -1;
+  if (insn.op != BOP_SOP && val_has_imm(insn.b.val) && !read_word(&ptr, info, &insn.b.imm)) return -1;
   if (val_has_imm(insn.a.val) && !read_word(&ptr, info, &insn.a.imm)) return -1;
 
   info->insn_type = dis_nonbranch;
